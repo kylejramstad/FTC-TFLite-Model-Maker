@@ -1,7 +1,26 @@
 # -*- coding: utf-8 -*-
 
+#Imports
 import sys
+from PIL import Image
+import os
+import xml.etree.ElementTree as ET
+import numpy as np
+import random
+import shutil
+from tflite_model_maker.config import ExportFormat, QuantizationConfig
+from tflite_model_maker import model_spec
+from tflite_model_maker import object_detector
+from tflite_support import metadata
+import tensorflow as tf
+assert tf.__version__.startswith('2')
 
+tf.get_logger().setLevel('ERROR')
+from absl import logging
+logging.set_verbosity(logging.ERROR)
+
+#Take in the arguments for this script
+#The user picked the project folder, image resize infox and modelType
 PATH = sys.argv[1]
 
 newX = int(sys.argv[2])
@@ -20,19 +39,12 @@ if modelType == 'efficientdet-lite3':
 if modelType == 'efficientdet-lite4':
   modelType_uri = 'https://tfhub.dev/tensorflow/efficientdet/lite4/feature-vector/1'
 
-
-from PIL import Image
-import os
-import xml.etree.ElementTree as ET
-import numpy as np
-import random
-import shutil
-
-#delete non-image file
+#Delete non-image file
+#This file may exist in the exported data from kili-technology
 if os.path.isfile(PATH+'/images/remote_assets.csv'):
     os.remove(PATH+'/images/remote_assets.csv')
 
-#resize images
+#resize the images
 for filename in os.listdir(PATH+"/images/"):
   if filename.endswith("jpg"):
       img_org = Image.open(PATH+"/images/"+filename)
@@ -40,11 +52,11 @@ for filename in os.listdir(PATH+"/images/"):
       img_org = img_org.resize(newsize)
       img_org.save(PATH+"/training/images/"+filename)
 
-#lables used in data
+#keep track of all the lables used in the data
 labels = {}
 labelNumber = 0
 
-#adjust pascal voc files
+#adjust pascal voc files to match the resized images
 for filename in os.listdir(PATH+"/labels/"):
   tree = ET.parse(PATH+"/labels/"+filename)
   root = tree.getroot()
@@ -86,6 +98,7 @@ for filename in os.listdir(PATH+"/labels/"):
 
   tree.write(PATH+"/training/Annotations/"+filename)
 
+#Split the data randomly into the training data, validation data, and testing data
 image_paths = os.listdir(PATH+'/images/')
 random.shuffle(image_paths)
 
@@ -100,27 +113,7 @@ for i, image_path in enumerate(image_paths):
     shutil.move(PATH+'/training/Annotations/'+image_path.replace("jpg", "xml"), PATH+'/testing/Annotations')
 
 
-# Train the object detection model
-import numpy as np
-import os
-
-from tflite_model_maker.config import ExportFormat, QuantizationConfig
-from tflite_model_maker import model_spec
-from tflite_model_maker import object_detector
-
-from tflite_support import metadata
-
-import tensorflow as tf
-assert tf.__version__.startswith('2')
-
-tf.get_logger().setLevel('ERROR')
-from absl import logging
-logging.set_verbosity(logging.ERROR)
-
-# Confirm TF Version (not needed for this script)
-# print("\nTensorflow Version:")
-# print(tf.__version__)
-# print()
+### Train the object detection model ###
 
 # Load Datasets
 train_data = object_detector.DataLoader.from_pascal_voc(images_dir=PATH+'/training/images',annotations_dir=PATH+'/training/Annotations',label_map=labels)
